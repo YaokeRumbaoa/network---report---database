@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Report Database</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #374151;
+        }
+        /* Print-specific styles */
+        @media print {
+            body {
+                background-color: #ffffff;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .print-table th, .print-table td {
+                border: 1px solid #000;
+                padding: 8px;
+            }
+        }
+        
+        /* New class for selected cell highlighting */
+        .selected-cell {
+            background-color: #dbeafe !important; /* light blue-200 */
+            box-shadow: inset 0 0 0 2px #3b82f6; /* blue-500 */
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-6 sm:p-10">
+        <!-- School Title -->
+        <div class="text-center mb-6">
+            <h1 class="text-3xl sm:text-4xl font-bold text-indigo-700 mb-2">RAMON MAGSAYSAY (CUBAO) HIGH SCHOOL</h1>
+            <p class="text-gray-500">Network Report Database</p>
+        </div>
+
+        <!-- Data Source and Print Section -->
+        <div class="no-print mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center">Data Source & Printing</h2>
+            <div class="flex flex-col sm:flex-row gap-4 mb-4">
+                <input type="text" id="csvUrlInput" placeholder="Paste Google Sheet CSV URL here..."
+                    class="flex-1 p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                <button id="loadUrlBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300">
+                    Load from URL
+                </button>
+            </div>
+            <div class="text-center">
+                <button id="printBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300">
+                    Print Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Data Entry Form -->
+        <div class="no-print mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 text-center" id="formTitle">Add New Entry</h2>
+            <form id="dataForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <input type="hidden" id="entryIndex">
+                <!-- Form fields will be dynamically generated here -->
+            </form>
+            <div class="flex justify-center mt-6 gap-4">
+                <button type="submit" form="dataForm" id="submitBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300">Add Entry</button>
+                <button type="button" id="cancelBtn" class="bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300 hidden">Cancel</button>
+            </div>
+        </div>
+        
+        <!-- Search and Filter Section -->
+        <div class="no-print flex flex-col sm:flex-row gap-4 mb-6">
+            <input type="text" id="searchInput" placeholder="Search any field..."
+                class="flex-1 p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+            <select id="filterSelect" class="p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                <option value="all">Filter by...</option>
+            </select>
+        </div>
+
+        <div id="statusMessage" class="p-3 mb-4 text-center rounded-lg font-medium text-sm"></div>
+
+        <!-- Data Table -->
+        <div class="overflow-x-auto rounded-lg shadow-inner border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200 print-table">
+                <thead class="bg-gray-100 sticky top-0">
+                    <tr id="tableHeader">
+                        <!-- Table headers will be injected here -->
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Table rows will be injected here -->
+                </tbody>
+            </table>
+        </div>
+        <p id="noResults" class="hidden text-center text-gray-400 mt-4">No results found.</p>
+        
+        <!-- Action Buttons -->
+        <div class="no-print mt-8 text-center flex justify-center gap-4">
+            <button id="clearDataBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300">
+                Clear Local Data
+            </button>
+            <button id="refreshDataBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition-all duration-300">
+                Reload Original Data
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Raw Data String from the provided CSV file ---
+        // NOTE: This is a fallback and will be replaced by data from the Google Sheet URL.
+        const rawCSVData = `ROUTER LOCATION,FA / Broadband Account Number,CUSTOMER ID,SERVICE ID,IP Address,Username ,Password,S/N Primary Modem,SSID,WLAN Key,SpeedTest Link,Download Speed (Mbps),Upload Speed (Mbps),Date Taken,Status
+Mathay Bldg.-HOPE Center,,,,,root,5w9aHeBb,4857544302BF7BAD,HUAWEI-nK57,p85z3TRX,https://www.speedtest.net/result/c/12345,150,50,2024-05-15,Active
+Main Bldg. -                               2nd Flr. Apprentice,,,,,root,DSFVAy42,4857544302BE1DAD,HUAWEI - 3Cd9,egbwsMk9,https://www.speedtest.net/result/c/67890,200,80,2024-05-14,Active
+Main Bldg. -                              3rd Flr. Library,,,,,root,VPcD9aKc,4857544302BF45AD,HUAWEI - Eu22,mFveA6hQ,,,,,Inactive
+`;
+
+        // --- DOM Elements ---
+        const searchInput = document.getElementById('searchInput');
+        const filterSelect = document.getElementById('filterSelect');
+        const dataTableBody = document.getElementById('dataTableBody');
+        const tableHeader = document.getElementById('tableHeader');
+        const statusMessage = document.getElementById('statusMessage');
+        const noResults = document.getElementById('noResults');
+        const clearDataBtn = document.getElementById('clearDataBtn');
+        const refreshDataBtn = document.getElementById('refreshDataBtn');
+        const dataForm = document.getElementById('dataForm');
+        const formTitle = document.getElementById('formTitle');
+        const submitBtn = document.getElementById('submitBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const entryIndexInput = document.getElementById('entryIndex');
+        const csvUrlInput = document.getElementById('csvUrlInput');
+        const loadUrlBtn = document.getElementById('loadUrlBtn');
+        const printBtn = document.getElementById('printBtn');
+        
+        let selectedCell = null;
+
+        let data = [];
+        let headers = [];
+
+        // --- Data Parsing Function ---
+        function parseCSV(csvText) {
+            const rows = csvText.trim().split('\n').map(row => row.split(','));
+            const headers = rows[0].map(h => h.trim());
+            const parsedData = rows.slice(1).map(row => {
+                const rowObj = {};
+                headers.forEach((header, i) => {
+                    rowObj[header] = row[i] ? row[i].trim() : '';
+                });
+                return rowObj;
+            });
+            return { headers, data: parsedData };
+        }
+
+        // --- UI Rendering Functions ---
+        function renderTable(filteredData) {
+            dataTableBody.innerHTML = '';
+            if (filteredData.length === 0) {
+                noResults.classList.remove('hidden');
+                return;
+            }
+            noResults.classList.add('hidden');
+            
+            filteredData.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-50 transition-colors duration-200';
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer';
+
+                    // --- Updated logic for rendering specific headers ---
+                    if (header === 'SpeedTest Link' && row[header]) {
+                        const link = document.createElement('a');
+                        link.href = row[header];
+                        link.textContent = row[header];
+                        link.target = '_blank';
+                        link.className = 'text-indigo-600 hover:text-indigo-900 break-all';
+                        td.appendChild(link);
+                    } else if (header === 'Date Taken' && row[header]) {
+                        // Format the date to a more readable format
+                        const date = new Date(row[header]);
+                        if (!isNaN(date)) {
+                            td.textContent = date.toLocaleDateString();
+                        } else {
+                            td.textContent = row[header]; // Display original if invalid date
+                        }
+                    } else {
+                        td.textContent = row[header];
+                    }
+
+                    // Add click event listener to each cell
+                    td.addEventListener('click', () => {
+                        // Remove highlight from previous cell
+                        if (selectedCell) {
+                            selectedCell.classList.remove('selected-cell');
+                        }
+                        // Add highlight to current cell
+                        td.classList.add('selected-cell');
+                        selectedCell = td;
+                    });
+                    tr.appendChild(td);
+                });
+                // Add actions column
+                const actionsTd = document.createElement('td');
+                actionsTd.className = 'px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-right no-print';
+                
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.className = 'text-indigo-600 hover:text-indigo-900 mr-4';
+                editBtn.onclick = () => editEntry(index);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.className = 'text-red-600 hover:text-red-900';
+                deleteBtn.onclick = () => deleteEntry(index);
+                
+                actionsTd.appendChild(editBtn);
+                actionsTd.appendChild(deleteBtn);
+                tr.appendChild(actionsTd);
+
+                dataTableBody.appendChild(tr);
+            });
+        }
+
+        function renderHeaders() {
+            tableHeader.innerHTML = '';
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.className = 'px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider';
+                th.textContent = header;
+                tableHeader.appendChild(th);
+            });
+            // Add header for actions
+            const actionsTh = document.createElement('th');
+            actionsTh.className = 'px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider no-print';
+            actionsTh.textContent = 'Actions';
+            tableHeader.appendChild(actionsTh);
+        }
+
+        function populateForm() {
+            dataForm.innerHTML = '';
+            headers.forEach(header => {
+                const label = document.createElement('label');
+                label.className = 'block';
+                label.innerHTML = `
+                    <span class="text-gray-700 font-medium text-sm">${header}</span>
+                    <input type="text" name="${header}" class="mt-1 p-2 block w-full rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                `;
+                dataForm.appendChild(label);
+            });
+            // Add hidden input for index
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.id = 'entryIndex';
+            dataForm.appendChild(hiddenInput);
+        }
+        
+        function populateFilterDropdown() {
+            filterSelect.innerHTML = '<option value="all">All Fields</option>';
+            headers.forEach(header => {
+                const option = document.createElement('option');
+                option.value = header;
+                option.textContent = header;
+                filterSelect.appendChild(option);
+            });
+        }
+
+        // --- CRUD Logic ---
+        function addEntry(e) {
+            e.preventDefault();
+            const formEntries = new FormData(dataForm);
+            const newEntry = {};
+            headers.forEach(header => {
+                newEntry[header] = formEntries.get(header) || '';
+            });
+
+            const index = entryIndexInput.value;
+            if (index === '') {
+                // Add new entry
+                data.push(newEntry);
+                setStatus('New entry added successfully.', 'bg-green-200 text-green-800');
+            } else {
+                // Update existing entry
+                data[index] = newEntry;
+                setStatus('Entry updated successfully.', 'bg-green-200 text-green-800');
+            }
+
+            saveDataToLocal();
+            renderTable(data);
+            resetForm();
+        }
+
+        function editEntry(index) {
+            const entry = data[index];
+            headers.forEach(header => {
+                const input = dataForm.querySelector(`[name="${header}"]`);
+                if (input) {
+                    input.value = entry[header];
+                }
+            });
+            entryIndexInput.value = index;
+            formTitle.textContent = 'Edit Entry';
+            submitBtn.textContent = 'Update Entry';
+            cancelBtn.classList.remove('hidden');
+        }
+
+        function deleteEntry(index) {
+            const confirmed = confirm('Are you sure you want to delete this entry?');
+            if (confirmed) {
+                data.splice(index, 1);
+                saveDataToLocal();
+                renderTable(data);
+                setStatus('Entry deleted successfully.', 'bg-red-200 text-red-800');
+            }
+        }
+
+        function resetForm() {
+            dataForm.reset();
+            entryIndexInput.value = '';
+            formTitle.textContent = 'Add New Entry';
+            submitBtn.textContent = 'Add Entry';
+            cancelBtn.classList.add('hidden');
+        }
+
+        // --- Application Logic ---
+        async function loadData(csvUrl = null) {
+            let loadedData;
+            let loadedHeaders;
+            const storedData = localStorage.getItem('reportData');
+            const storedHeaders = localStorage.getItem('reportHeaders');
+            const storedUrl = localStorage.getItem('csvUrl');
+
+            // Set the URL input field
+            csvUrlInput.value = storedUrl || '';
+
+            // Load from local storage if available and no URL is provided
+            if (storedData && storedHeaders && !csvUrl) {
+                try {
+                    loadedData = JSON.parse(storedData);
+                    loadedHeaders = JSON.parse(storedHeaders);
+                    setStatus('Loaded from local storage (Offline)', 'bg-yellow-200 text-yellow-800');
+                } catch (e) {
+                    // Fallback to initial data if parsing fails
+                    const parsed = parseCSV(rawCSVData);
+                    loadedData = parsed.data;
+                    loadedHeaders = parsed.headers;
+                    setStatus('Could not load from local storage. Using default data.', 'bg-red-200 text-red-800');
+                }
+            } else if (csvUrl) {
+                // Load from the provided URL
+                try {
+                    setStatus('Loading data from URL...', 'bg-blue-200 text-blue-800');
+                    const response = await fetch(csvUrl);
+                    const csvText = await response.text();
+                    const parsed = parseCSV(csvText);
+                    loadedData = parsed.data;
+                    loadedHeaders = parsed.headers;
+                    localStorage.setItem('csvUrl', csvUrl);
+                    setStatus('Data loaded and saved from URL.', 'bg-green-200 text-green-800');
+                } catch (error) {
+                    setStatus('Failed to load data from URL. Please check the URL and your connection.', 'bg-red-200 text-red-800');
+                    // Fallback to local data or default if fetch fails
+                    const parsed = parseCSV(rawCSVData);
+                    loadedData = parsed.data;
+                    loadedHeaders = parsed.headers;
+                }
+            } else {
+                // Initial load from the raw string
+                const parsed = parseCSV(rawCSVData);
+                loadedData = parsed.data;
+                loadedHeaders = parsed.headers;
+                setStatus('Loaded initial data.', 'bg-green-200 text-green-800');
+            }
+
+            data = loadedData;
+            headers = loadedHeaders;
+            renderHeaders();
+            populateFilterDropdown();
+            populateForm();
+            renderTable(data);
+        }
+
+        function saveDataToLocal() {
+            localStorage.setItem('reportData', JSON.stringify(data));
+            localStorage.setItem('reportHeaders', JSON.stringify(headers));
+        }
+
+        function setStatus(message, className) {
+            statusMessage.textContent = message;
+            statusMessage.className = `p-3 mb-4 text-center rounded-lg font-medium text-sm ${className}`;
+        }
+        
+        // --- Event Listeners ---
+        dataForm.addEventListener('submit', addEntry);
+        cancelBtn.addEventListener('click', resetForm);
+
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filterField = filterSelect.value;
+            
+            const filteredData = data.filter(row => {
+                if (filterField === 'all') {
+                    // Search all fields
+                    return Object.values(row).some(value => value.toLowerCase().includes(searchTerm));
+                } else {
+                    // Search a specific field
+                    return row[filterField].toLowerCase().includes(searchTerm);
+                }
+            });
+            renderTable(filteredData);
+        });
+
+        filterSelect.addEventListener('change', () => {
+            // Re-run the search with the new filter
+            searchInput.dispatchEvent(new Event('input'));
+        });
+
+        refreshDataBtn.addEventListener('click', () => {
+            const parsed = parseCSV(rawCSVData);
+            data = parsed.data;
+            headers = parsed.headers;
+            saveDataToLocal();
+            renderHeaders();
+            populateFilterDropdown();
+            populateForm();
+            renderTable(data);
+            resetForm();
+            setStatus('Original data reloaded and saved to local storage.', 'bg-green-200 text-green-800');
+        });
+        
+        clearDataBtn.addEventListener('click', () => {
+            localStorage.clear();
+            loadData();
+            setStatus('Local data cleared. App will reload original data on next load.', 'bg-red-200 text-red-800');
+        });
+        
+        loadUrlBtn.addEventListener('click', () => {
+            const url = csvUrlInput.value.trim();
+            if (url) {
+                loadData(url);
+            } else {
+                setStatus('Please enter a valid Google Sheet CSV URL.', 'bg-red-200 text-red-800');
+            }
+        });
+
+        printBtn.addEventListener('click', () => {
+            window.print();
+        });
+
+        // --- Initial Load ---
+        window.addEventListener('load', () => loadData());
+    </script>
+</body>
+</html>
